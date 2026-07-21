@@ -11,6 +11,7 @@ import (
 
 const (
 	resourceGovernanceDreps     = "governance/dreps"
+	resourceGovernanceCommittee = "governance/committee"
 	resourceGovernanceProposals = "governance/proposals"
 	resourceDrepDelegators      = "delegators"
 	resourceDrepMetadata        = "metadata"
@@ -55,9 +56,10 @@ type DrepDelegator struct {
 }
 
 type DrepUpdate struct {
-	TxHash    string `json:"tx_hash"`
-	CertIndex int    `json:"cert_index"`
-	Action    string `json:"action"`
+	TxHash    string  `json:"tx_hash"`
+	CertIndex int     `json:"cert_index"`
+	Action    string  `json:"action"`
+	Deposit   *string `json:"deposit"`
 }
 
 type DrepVote struct {
@@ -132,6 +134,50 @@ type ProposalMetadataV2 struct {
 	Error        *MetadataError `json:"error"`
 }
 
+type CommitteeQuorum struct {
+	Numerator   int `json:"numerator"`
+	Denominator int `json:"denominator"`
+}
+
+type CommitteeMember struct {
+	CCColdID        string  `json:"cc_cold_id"`
+	CCColdHex       string  `json:"cc_cold_hex"`
+	CCColdHasScript bool    `json:"cc_cold_has_script"`
+	CCHotID         *string `json:"cc_hot_id"`
+	CCHotHex        *string `json:"cc_hot_hex"`
+	CCHotHasScript  *bool   `json:"cc_hot_has_script"`
+	Status          string  `json:"status"`
+	ExpirationEpoch int     `json:"expiration_epoch"`
+}
+
+type Committee struct {
+	GovActionID    *string           `json:"gov_action_id"`
+	ProposalTxHash *string           `json:"proposal_tx_hash"`
+	ProposalIndex  *int              `json:"proposal_index"`
+	IsDissolved    bool              `json:"is_dissolved"`
+	Quorum         CommitteeQuorum   `json:"quorum"`
+	Members        []CommitteeMember `json:"members"`
+}
+
+type CommitteeVote struct {
+	TxHash         string  `json:"tx_hash"`
+	VoterHotID     string  `json:"voter_hot_id"`
+	ProposalID     string  `json:"proposal_id"`
+	ProposalTxHash string  `json:"proposal_tx_hash"`
+	ProposalIndex  int     `json:"proposal_index"`
+	GovernanceType string  `json:"governance_type"`
+	Vote           string  `json:"vote"`
+	MetadataURL    *string `json:"metadata_url"`
+	MetadataHash   *string `json:"metadata_hash"`
+	BlockHeight    int     `json:"block_height"`
+	BlockTime      int     `json:"block_time"`
+}
+
+type CommitteeVoteResult struct {
+	Res []CommitteeVote
+	Err error
+}
+
 type DrepResult struct {
 	Res []Drep
 	Err error
@@ -165,6 +211,170 @@ type ProposalWithdrawalResult struct {
 type ProposalVoteResult struct {
 	Res []ProposalVote
 	Err error
+}
+
+// Committee returns the currently active constitutional committee.
+func (c *apiClient) Committee(ctx context.Context) (committee Committee, err error) {
+	requestUrl, err := url.Parse(fmt.Sprintf("%s/%s", c.server, resourceGovernanceCommittee))
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestUrl.String(), nil)
+	if err != nil {
+		return
+	}
+
+	res, err := c.handleRequest(req)
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+
+	if err = json.NewDecoder(res.Body).Decode(&committee); err != nil {
+		return
+	}
+	return committee, nil
+}
+
+// CommitteeVotes returns the list of constitutional committee votes.
+func (c *apiClient) CommitteeVotes(ctx context.Context, query APIQueryParams) (votes []CommitteeVote, err error) {
+	requestUrl, err := url.Parse(fmt.Sprintf("%s/%s/%s", c.server, resourceGovernanceCommittee, resourceProposalVotes))
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestUrl.String(), nil)
+	if err != nil {
+		return
+	}
+	v := req.URL.Query()
+	v = formatParams(v, query)
+	req.URL.RawQuery = v.Encode()
+
+	res, err := c.handleRequest(req)
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+
+	if err = json.NewDecoder(res.Body).Decode(&votes); err != nil {
+		return
+	}
+	return votes, nil
+}
+
+func (c *apiClient) CommitteeVotesAll(ctx context.Context) <-chan CommitteeVoteResult {
+	ch := make(chan CommitteeVoteResult, c.routines)
+	jobs := make(chan methodOptions, c.routines)
+	quit := make(chan bool, 1)
+
+	wg := sync.WaitGroup{}
+
+	for i := 0; i < c.routines; i++ {
+		wg.Add(1)
+		go func(jobs chan methodOptions, ch chan CommitteeVoteResult, wg *sync.WaitGroup) {
+			defer wg.Done()
+			for j := range jobs {
+				votes, err := c.CommitteeVotes(j.ctx, j.query)
+				if len(votes) != j.query.Count || err != nil {
+					select {
+					case quit <- true:
+					default:
+					}
+				}
+				res := CommitteeVoteResult{Res: votes, Err: err}
+				ch <- res
+			}
+
+		}(jobs, ch, &wg)
+	}
+	go func() {
+		defer close(ch)
+		fetchNextPage := true
+		for i := 1; fetchNextPage; i++ {
+			select {
+			case <-quit:
+				fetchNextPage = false
+			default:
+				jobs <- methodOptions{ctx: ctx, query: APIQueryParams{Count: 100, Page: i}}
+			}
+		}
+
+		close(jobs)
+		wg.Wait()
+	}()
+	return ch
+}
+
+// CommitteeMemberVotes returns votes cast under a constitutional committee credential.
+func (c *apiClient) CommitteeMemberVotes(ctx context.Context, ccID string, query APIQueryParams) (votes []CommitteeVote, err error) {
+	requestUrl, err := url.Parse(fmt.Sprintf("%s/%s/%s/%s", c.server, resourceGovernanceCommittee, ccID, resourceProposalVotes))
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestUrl.String(), nil)
+	if err != nil {
+		return
+	}
+	v := req.URL.Query()
+	v = formatParams(v, query)
+	req.URL.RawQuery = v.Encode()
+
+	res, err := c.handleRequest(req)
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+
+	if err = json.NewDecoder(res.Body).Decode(&votes); err != nil {
+		return
+	}
+	return votes, nil
+}
+
+func (c *apiClient) CommitteeMemberVotesAll(ctx context.Context, ccID string) <-chan CommitteeVoteResult {
+	ch := make(chan CommitteeVoteResult, c.routines)
+	jobs := make(chan methodOptions, c.routines)
+	quit := make(chan bool, 1)
+
+	wg := sync.WaitGroup{}
+
+	for i := 0; i < c.routines; i++ {
+		wg.Add(1)
+		go func(jobs chan methodOptions, ch chan CommitteeVoteResult, wg *sync.WaitGroup) {
+			defer wg.Done()
+			for j := range jobs {
+				votes, err := c.CommitteeMemberVotes(j.ctx, ccID, j.query)
+				if len(votes) != j.query.Count || err != nil {
+					select {
+					case quit <- true:
+					default:
+					}
+				}
+				res := CommitteeVoteResult{Res: votes, Err: err}
+				ch <- res
+			}
+
+		}(jobs, ch, &wg)
+	}
+	go func() {
+		defer close(ch)
+		fetchNextPage := true
+		for i := 1; fetchNextPage; i++ {
+			select {
+			case <-quit:
+				fetchNextPage = false
+			default:
+				jobs <- methodOptions{ctx: ctx, query: APIQueryParams{Count: 100, Page: i}}
+			}
+		}
+
+		close(jobs)
+		wg.Wait()
+	}()
+	return ch
 }
 
 // Dreps returns the List of registered DReps.

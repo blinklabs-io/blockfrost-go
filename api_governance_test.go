@@ -2,11 +2,127 @@ package blockfrost_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
 	"github.com/blockfrost/blockfrost-go"
 )
+
+func TestCommittee(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/governance/committee" {
+			t.Fatalf("expected /governance/committee got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"gov_action_id": null,
+			"proposal_tx_hash": null,
+			"proposal_index": null,
+			"is_dissolved": false,
+			"quorum": {"numerator": 2, "denominator": 3},
+			"members": [{
+				"cc_cold_id": "cc_cold1test",
+				"cc_cold_hex": "abcdef",
+				"cc_cold_has_script": false,
+				"cc_hot_id": null,
+				"cc_hot_hex": null,
+				"cc_hot_has_script": null,
+				"status": "not_authorized",
+				"expiration_epoch": 580
+			}]
+		}`))
+	}))
+	defer s.Close()
+
+	api := blockfrost.NewAPIClient(blockfrost.APIClientOptions{Server: s.URL})
+	got, err := api.Committee(context.TODO())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IsDissolved || got.Quorum.Numerator != 2 || got.Quorum.Denominator != 3 {
+		t.Fatalf("unexpected committee %+v", got)
+	}
+	if len(got.Members) != 1 || got.Members[0].CCColdID != "cc_cold1test" {
+		t.Fatalf("unexpected committee members %+v", got.Members)
+	}
+	if got.GovActionID != nil || got.ProposalTxHash != nil || got.ProposalIndex != nil {
+		t.Fatalf("expected nullable proposal fields, got %+v", got)
+	}
+}
+
+func TestCommitteeVotes(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/governance/committee/votes" {
+			t.Fatalf("expected /governance/committee/votes got %s", r.URL.Path)
+		}
+		if r.URL.RawQuery != "count=1&order=desc&page=2" {
+			t.Fatalf("unexpected query %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{
+			"tx_hash": "tx1",
+			"voter_hot_id": "cc_hot1test",
+			"proposal_id": "gov_action1test",
+			"proposal_tx_hash": "proposal1",
+			"proposal_index": 0,
+			"governance_type": "parameter_change",
+			"vote": "yes",
+			"metadata_url": null,
+			"metadata_hash": null,
+			"block_height": 11045358,
+			"block_time": 1746037200
+		}]`))
+	}))
+	defer s.Close()
+
+	api := blockfrost.NewAPIClient(blockfrost.APIClientOptions{Server: s.URL})
+	got, err := api.CommitteeVotes(context.TODO(), blockfrost.APIQueryParams{Count: 1, Page: 2, Order: "desc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].VoterHotID != "cc_hot1test" || got[0].MetadataURL != nil {
+		t.Fatalf("unexpected committee votes %+v", got)
+	}
+}
+
+func TestCommitteeMemberVotes(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/governance/committee/cc_hot1test/votes" {
+			t.Fatalf("expected /governance/committee/cc_hot1test/votes got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer s.Close()
+
+	api := blockfrost.NewAPIClient(blockfrost.APIClientOptions{Server: s.URL})
+	got, err := api.CommitteeMemberVotes(context.TODO(), "cc_hot1test", blockfrost.APIQueryParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty votes, got %+v", got)
+	}
+}
+
+func TestDrepUpdateDepositUnmarshal(t *testing.T) {
+	var got []blockfrost.DrepUpdate
+	if err := json.Unmarshal([]byte(`[
+		{"tx_hash":"tx1","cert_index":0,"action":"registered","deposit":"500000000"},
+		{"tx_hash":"tx2","cert_index":1,"action":"deregistered","deposit":null}
+	]`), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Deposit == nil || *got[0].Deposit != "500000000" {
+		t.Fatalf("unexpected registered deposit %+v", got)
+	}
+	if got[1].Deposit != nil {
+		t.Fatalf("expected nil deregistration deposit %+v", got[1])
+	}
+}
 
 func TestResourceDrepsIntegration(t *testing.T) {
 	t.Parallel()

@@ -124,6 +124,9 @@ type AccountRegistrationHistory struct {
 	// Enum: "registered" "deregistered"
 	Action string `json:"action"`
 
+	// Deposit in Lovelaces paid at this registration. Null on deregistration rows.
+	Deposit *string `json:"deposit"`
+
 	// Slot of the transaction
 	TxSlot int `json:"tx_slot"`
 
