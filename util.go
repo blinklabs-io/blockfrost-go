@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/blockfrost/blockfrost-go/internal/version"
 )
@@ -89,7 +90,22 @@ func formatParams(v url.Values, query APIQueryParams) url.Values {
 		v.Add("to", query.To)
 	}
 
-	v.Encode()
+	return v
+}
+
+// formatDrepsParams adds the query parameters supported by /governance/dreps
+// only. Kept separate from formatParams so other endpoints never emit them.
+func formatDrepsParams(v url.Values, query APIQueryParams) url.Values {
+	if query.OrderBy == "amount" {
+		v.Add("order_by", query.OrderBy)
+	}
+	if query.Retired != nil {
+		v.Add("retired", strconv.FormatBool(*query.Retired))
+	}
+	if query.Expired != nil {
+		v.Add("expired", strconv.FormatBool(*query.Expired))
+	}
+
 	return v
 }
 

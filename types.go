@@ -85,4 +85,12 @@ type APIQueryParams struct {
 	Order string
 	From  string
 	To    string
+
+	// OrderBy, Retired and Expired are marshalled to "order_by", "retired"
+	// and "expired" by Dreps only; all other endpoints ignore them.
+	// OrderBy set to "amount" sorts by voting power instead of registration order.
+	// Retired and Expired filter by registration and activity state; nil returns both.
+	OrderBy string
+	Retired *bool
+	Expired *bool
 }
