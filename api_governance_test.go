@@ -11,6 +11,70 @@ import (
 	"github.com/blockfrost/blockfrost-go"
 )
 
+func TestDreps(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/governance/dreps" {
+			t.Fatalf("expected /governance/dreps got %s", r.URL.Path)
+		}
+		if r.URL.RawQuery != "expired=false&order=desc&order_by=amount&retired=false" {
+			t.Fatalf("unexpected query %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[
+			{
+				"drep_id": "drep1mvdu8slennngja7w4un6knwezufra70887zuxpprd64jxfveahn",
+				"hex": "db1bc3c3f99ce68977ceaf27ab4dd917123ef9e73f85c304236eab23",
+				"amount": "2000000",
+				"has_script": false,
+				"retired": false,
+				"expired": false,
+				"last_active_epoch": 509,
+				"metadata": {
+					"url": "https://aaa.xyz/drep.json",
+					"hash": "a14a5ad4f36bddc00f92ddb39fd9ac633c0fd43f8bfa57758f9163d10ef916de",
+					"json_metadata": {"body": {"givenName": "Ryan Williams"}},
+					"bytes": "\\x7b0a20202240636f6e74657874223a"
+				}
+			},
+			{
+				"drep_id": "drep1cxayn4fgy27yaucvhamsq2rpvghazqt987nn9sz5zdnyf0wt0xk",
+				"hex": "c1ba49d52822bc4ef30cbf77060251668f1a6ef15ca46d18f76cc758",
+				"amount": "0",
+				"has_script": false,
+				"retired": true,
+				"expired": false,
+				"last_active_epoch": null,
+				"metadata": null
+			}
+		]`))
+	}))
+	defer s.Close()
+
+	api := blockfrost.NewAPIClient(blockfrost.APIClientOptions{Server: s.URL})
+	retired, expired := false, false
+	got, err := api.Dreps(context.TODO(), blockfrost.APIQueryParams{
+		Order: "desc", OrderBy: "amount", Retired: &retired, Expired: &expired,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 dreps, got %+v", got)
+	}
+	if got[0].Amount != "2000000" || got[0].HasScript || got[0].Retired || got[0].Expired {
+		t.Fatalf("unexpected drep %+v", got[0])
+	}
+	if got[0].LastActiveEpoch == nil || *got[0].LastActiveEpoch != 509 {
+		t.Fatalf("unexpected last_active_epoch %+v", got[0].LastActiveEpoch)
+	}
+	if got[0].Metadata == nil || got[0].Metadata.URL != "https://aaa.xyz/drep.json" || got[0].Metadata.Bytes == nil || got[0].Metadata.Error != nil {
+		t.Fatalf("unexpected metadata %+v", got[0].Metadata)
+	}
+	if !got[1].Retired || got[1].LastActiveEpoch != nil || got[1].Metadata != nil {
+		t.Fatalf("expected retired drep with null metadata %+v", got[1])
+	}
+}
+
 func TestCommittee(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/governance/committee" {

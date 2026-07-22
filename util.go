@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/blockfrost/blockfrost-go/internal/version"
 )
@@ -87,6 +88,15 @@ func formatParams(v url.Values, query APIQueryParams) url.Values {
 	}
 	if query.To != "" {
 		v.Add("to", query.To)
+	}
+	if query.OrderBy == "amount" {
+		v.Add("order_by", query.OrderBy)
+	}
+	if query.Retired != nil {
+		v.Add("retired", strconv.FormatBool(*query.Retired))
+	}
+	if query.Expired != nil {
+		v.Add("expired", strconv.FormatBool(*query.Expired))
 	}
 
 	v.Encode()

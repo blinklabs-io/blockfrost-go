@@ -26,6 +26,27 @@ const (
 type Drep struct {
 	DrepID string `json:"drep_id"`
 	Hex    string `json:"hex"`
+
+	// The total amount of voting power this DRep is delegated.
+	Amount          string `json:"amount"`
+	HasScript       bool   `json:"has_script"`
+	Retired         bool   `json:"retired"`
+	Expired         bool   `json:"expired"`
+	LastActiveEpoch *int   `json:"last_active_epoch"`
+
+	// Off-chain metadata associated with the DRep's latest registration.
+	// Nil when the DRep has no registration anchor (e.g. drep_always_abstain).
+	Metadata *DrepListMetadata `json:"metadata"`
+}
+
+// DrepListMetadata is the metadata embedded in /governance/dreps list items.
+// It matches DrepMetadata without the drep_id and hex fields.
+type DrepListMetadata struct {
+	URL          string         `json:"url"`
+	Hash         string         `json:"hash"`
+	JSONMetadata interface{}    `json:"json_metadata"`
+	Bytes        *string        `json:"bytes"`
+	Error        *MetadataError `json:"error"`
 }
 
 type DrepDetails struct {
