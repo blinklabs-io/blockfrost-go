@@ -78,7 +78,7 @@ type UnauthorizedError struct {
 type Transaction string
 
 // APIQueryParams contains query parameters. Marshalled to
-// "count", "page", "order", "from", "to", "order_by", "retired", "expired".
+// "count", "page", "order", "from", "to".
 type APIQueryParams struct {
 	Count int
 	Page  int
@@ -86,7 +86,8 @@ type APIQueryParams struct {
 	From  string
 	To    string
 
-	// Supported by /governance/dreps only.
+	// OrderBy, Retired and Expired are marshalled to "order_by", "retired"
+	// and "expired" by Dreps only; all other endpoints ignore them.
 	// OrderBy set to "amount" sorts by voting power instead of registration order.
 	// Retired and Expired filter by registration and activity state; nil returns both.
 	OrderBy string
