@@ -187,6 +187,11 @@ type APIClient interface {
 	PoolUpdatesAll(ctx context.Context, poolId string) <-chan PoolUpdateResult
 	PoolsExtended(ctx context.Context, query APIQueryParams) ([]PoolExtended, error)
 	PoolsExtendedAll(ctx context.Context) <-chan PoolsExtendedResult
+	Committee(ctx context.Context) (Committee, error)
+	CommitteeVotes(ctx context.Context, query APIQueryParams) ([]CommitteeVote, error)
+	CommitteeVotesAll(ctx context.Context) <-chan CommitteeVoteResult
+	CommitteeMemberVotes(ctx context.Context, ccID string, query APIQueryParams) ([]CommitteeVote, error)
+	CommitteeMemberVotesAll(ctx context.Context, ccID string) <-chan CommitteeVoteResult
 	Dreps(ctx context.Context, query APIQueryParams) ([]Drep, error)
 	DrepsAll(ctx context.Context) <-chan DrepResult
 	DrepDetails(ctx context.Context, drepId string) (DrepDetails, error)

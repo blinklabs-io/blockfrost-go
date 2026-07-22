@@ -2,11 +2,28 @@ package blockfrost_test
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 
 	"github.com/blockfrost/blockfrost-go"
 )
+
+func TestAccountRegistrationHistoryDepositUnmarshal(t *testing.T) {
+	var got []blockfrost.AccountRegistrationHistory
+	if err := json.Unmarshal([]byte(`[
+		{"tx_hash":"tx1","action":"registered","deposit":"2000000","tx_slot":45093580,"block_time":1646437200,"block_height":6745358},
+		{"tx_hash":"tx2","action":"deregistered","deposit":null,"tx_slot":48093580,"block_time":1649033600,"block_height":7126896}
+	]`), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Deposit == nil || *got[0].Deposit != "2000000" {
+		t.Fatalf("unexpected registered deposit %+v", got)
+	}
+	if got[1].Deposit != nil {
+		t.Fatalf("expected nil deregistration deposit %+v", got[1])
+	}
+}
 
 func TestResourceAccountIntegration(t *testing.T) {
 	t.Parallel()
