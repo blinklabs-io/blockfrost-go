@@ -412,6 +412,7 @@ func (c *apiClient) Dreps(ctx context.Context, query APIQueryParams) (ds []Drep,
 
 	v := req.URL.Query()
 	v = formatParams(v, query)
+	v = formatDrepsParams(v, query)
 	req.URL.RawQuery = v.Encode()
 
 	res, err := c.handleRequest(req)

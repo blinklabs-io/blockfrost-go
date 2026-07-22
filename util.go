@@ -89,6 +89,13 @@ func formatParams(v url.Values, query APIQueryParams) url.Values {
 	if query.To != "" {
 		v.Add("to", query.To)
 	}
+
+	return v
+}
+
+// formatDrepsParams adds the query parameters supported by /governance/dreps
+// only. Kept separate from formatParams so other endpoints never emit them.
+func formatDrepsParams(v url.Values, query APIQueryParams) url.Values {
 	if query.OrderBy == "amount" {
 		v.Add("order_by", query.OrderBy)
 	}
@@ -99,7 +106,6 @@ func formatParams(v url.Values, query APIQueryParams) url.Values {
 		v.Add("expired", strconv.FormatBool(*query.Expired))
 	}
 
-	v.Encode()
 	return v
 }
 
